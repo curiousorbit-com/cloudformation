@@ -1,0 +1,604 @@
+---
+# Copyright 2023 Curious Orbit Cloud Consulting Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+# If you don't want to spend time creating CloudFormation templates by hand
+# check out our OrbitBUILD solution https://curiousorbit.com/service/orbit-build/
+
+AWSTemplateFormatVersion: "2010-09-09"
+Description: A general template for Multi AZ VPCs
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: "VPC configuration"
+        Parameters:
+          - vpcCIDR
+          - publicSubnet0CIDR
+          - publicSubnet1CIDR
+          - privateSubnet0CIDR
+          - privateSubnet1CIDR
+          - protectedSubnet0CIDR
+          - protectedSubnet1CIDR
+          - isPublic
+      - Label:
+          default: "Resource Tagging"
+        Parameters:
+          - environment
+          - owner
+          - ownerEmail
+    ParameterLabels:
+      vpcCIDR:
+        default: The IPv4 CIDR range to use for the Virtual Private Cloud
+      publicSubnet0CIDR:
+        default: The IPv4 CIDR range to use for the 1st public subnet
+      publicSubnet1CIDR:
+        default: The IPv4 CIDR range to use for the 2nd public subnet
+      privateSubnet0CIDR:
+        default: The IPv4 CIDR range to use for the 1st private subnet
+      privateSubnet1CIDR:
+        default: The IPv4 CIDR range to use for the 2nd private subnet
+      protectedSubnet0CIDR:
+        default: The IPv4 CIDR range to use for the 1st protected subnet
+      protectedSubnet1CIDR:
+        default: The IPv4 CIDR range to use for the 2nd protected subnet
+      isPublic:
+        default: Should the VPC have access to the public Internet?
+      environment:
+        default: Define the type of environment (development or production)
+      owner:
+        default: Enter the person's name who is responsible for this resource
+      ownerEmail:
+        default: Enter the owner's email address
+
+Parameters:
+  environment:
+    Type: String
+    Default: development
+    AllowedValues:
+      - production
+      - development
+  owner:
+    Type: String
+    Default: CuriousOrbit
+  ownerEmail:
+    Type: String
+    Default: help@curiousorbit.com
+  vpcCIDR:
+    Type: String
+    AllowedPattern: "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/(\\d{1,2})"
+    ConstraintDescription: A valid CIDR IP range must be used
+    Default: 10.98.0.0/16
+  publicSubnet0CIDR:
+    Type: String
+    AllowedPattern: "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/(\\d{1,2})"
+    ConstraintDescription: A valid CIDR IP range must be used
+    Default: 10.98.32.0/21
+  publicSubnet1CIDR:
+    Type: String
+    AllowedPattern: "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/(\\d{1,2})"
+    ConstraintDescription: A valid CIDR IP range must be used
+    Default: 10.98.96.0/21
+  privateSubnet0CIDR:
+    Type: String
+    AllowedPattern: "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/(\\d{1,2})"
+    ConstraintDescription: A valid CIDR IP range must be used
+    Default: 10.98.0.0/19
+  privateSubnet1CIDR:
+    Type: String
+    AllowedPattern: "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/(\\d{1,2})"
+    ConstraintDescription: A valid CIDR IP range must be used
+    Default: 10.98.64.0/19
+  protectedSubnet0CIDR:
+    Type: String
+    AllowedPattern: "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/(\\d{1,2})"
+    ConstraintDescription: A valid CIDR IP range must be used
+    Default: 10.98.48.0/21
+  protectedSubnet1CIDR:
+    Type: String
+    AllowedPattern: "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/(\\d{1,2})"
+    ConstraintDescription: A valid CIDR IP range must be used
+    Default: 10.98.112.0/21
+  isPublic:
+    Type: String
+    Default: 'yes'
+    AllowedValues:
+      - 'yes'
+      - 'no'
+
+Conditions:
+  isPublic: !Equals [!Ref isPublic, 'yes']
+
+Resources:
+  vpc:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref vpcCIDR
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: environment
+          Value: !Ref environment
+        - Key: owner
+          Value: !Ref owner
+        - Key: ownerEmail
+          Value: !Ref ownerEmail
+        - Key: Name
+          Value: !Join ['-',[!Sub '${AWS::StackName}', !Ref 'AWS::Region']]
+
+  igw:
+    Type: AWS::EC2::InternetGateway
+    Condition: isPublic
+    DependsOn:
+      - vpc
+    Properties:
+      Tags:
+        - Key: environment
+          Value: !Ref environment
+        - Key: owner
+          Value: !Ref owner
+        - Key: ownerEmail
+          Value: !Ref ownerEmail
+        - Key: Name
+          Value: !Join ['-',[!Sub '${AWS::StackName}', igw, !Ref 'AWS::Region']]
+
+  igwAttach:
+    Type: 'AWS::EC2::VPCGatewayAttachment'
+    Condition: isPublic
+    DependsOn:
+      - vpc
+      - igw
+    Properties:
+      InternetGatewayId: !Ref igw
+      VpcId: !Ref vpc
+
+  # NAT Gateways
+  ## Elastic IP Addresses
+  natEIP0:
+    Type: AWS::EC2::EIP
+    Condition: isPublic
+    DependsOn:
+      - igw
+    Properties:
+      Domain: vpc
+
+  natEIP1:
+    Type: AWS::EC2::EIP
+    Condition: isPublic
+    DependsOn:
+      - igw
+    Properties:
+      Domain: vpc
+
+  ## Nat Gateways
+  natGateway0:
+    Type: AWS::EC2::NatGateway
+    Condition: isPublic
+    DependsOn:
+      - natEIP0
+      - publicSubnet0
+    Properties:
+      AllocationId: !GetAtt natEIP0.AllocationId
+      SubnetId: !Ref publicSubnet0
+      Tags:
+        - Key: environment
+          Value: !Ref environment
+        - Key: owner
+          Value: !Ref owner
+        - Key: ownerEmail
+          Value: !Ref ownerEmail
+        - Key: Name
+          Value: !Join ['-',[!Sub '${AWS::StackName}', ngw, !Ref 'AWS::Region']]
+
+  natGateway1:
+    Type: AWS::EC2::NatGateway
+    Condition: isPublic
+    DependsOn:
+      - natEIP1
+      - publicSubnet1
+    Properties:
+      AllocationId: !GetAtt natEIP1.AllocationId
+      SubnetId: !Ref publicSubnet1
+      Tags:
+        - Key: environment
+          Value: !Ref environment
+        - Key: owner
+          Value: !Ref owner
+        - Key: ownerEmail
+          Value: !Ref ownerEmail
+        - Key: Name
+          Value: !Join ['-',[!Sub '${AWS::StackName}', ngw, !Ref 'AWS::Region']]
+
+  # Subnets
+  ## Public
+  publicSubnet0:
+    Type: AWS::EC2::Subnet
+    Condition: isPublic
+    DependsOn:
+      - vpc
+    Properties:
+      AvailabilityZone: !Select [0,!GetAZs ""]
+      CidrBlock: !Ref publicSubnet0CIDR
+      MapPublicIpOnLaunch: false
+      VpcId: !Ref vpc
+      Tags:
+        - Key: owner
+          Value: !Ref owner
+        - Key: ownerEmail
+          Value: !Ref ownerEmail
+        - Key: environment
+          Value: !Ref environment
+        - Key: Name
+          Value: !Join ['-',[!Sub '${AWS::StackName}', public, !Select [0, !GetAZs ""]]]
+
+  publicSubnet1:
+    Type: AWS::EC2::Subnet
+    Condition: isPublic
+    DependsOn:
+      - vpc
+    Properties:
+      AvailabilityZone: !Select [1,!GetAZs ""]
+      CidrBlock: !Ref publicSubnet1CIDR
+      MapPublicIpOnLaunch: false
+      VpcId: !Ref vpc
+      Tags:
+        - Key: owner
+          Value: !Ref owner
+        - Key: ownerEmail
+          Value: !Ref ownerEmail
+        - Key: environment
+          Value: !Ref environment
+        - Key: Name
+          Value: !Join ['-',[!Sub '${AWS::StackName}', public, !Select [1, !GetAZs ""]]]
+
+  ## Private
+  privateSubnet0:
+    Type: AWS::EC2::Subnet
+    DependsOn:
+      - vpc
+    Properties:
+      AvailabilityZone: !Select [0,!GetAZs ""]
+      CidrBlock: !Ref privateSubnet0CIDR
+      MapPublicIpOnLaunch: false
+      VpcId: !Ref vpc
+      Tags:
+        - Key: owner
+          Value: !Ref owner
+        - Key: ownerEmail
+          Value: !Ref ownerEmail
+        - Key: environment
+          Value: !Ref environment
+        - Key: Name
+          Value: !Join ['-',[!Sub '${AWS::StackName}', private, !Select [0, !GetAZs ""]]]
+
+  privateSubnet1:
+    Type: AWS::EC2::Subnet
+    DependsOn:
+      - vpc
+    Properties:
+      AvailabilityZone: !Select [1,!GetAZs ""]
+      CidrBlock: !Ref privateSubnet1CIDR
+      MapPublicIpOnLaunch: false
+      VpcId: !Ref vpc
+      Tags:
+        - Key: owner
+          Value: !Ref owner
+        - Key: ownerEmail
+          Value: !Ref ownerEmail
+        - Key: environment
+          Value: !Ref environment
+        - Key: Name
+          Value: !Join ['-',[!Sub '${AWS::StackName}', private, !Select [1, !GetAZs ""]]]
+
+  ## Protected
+  protectedSubnet0:
+    Type: AWS::EC2::Subnet
+    DependsOn:
+      - vpc
+    Properties:
+      AvailabilityZone: !Select [ 0,!GetAZs "" ]
+      CidrBlock: !Ref protectedSubnet0CIDR
+      MapPublicIpOnLaunch: false
+      VpcId: !Ref vpc
+      Tags:
+        - Key: owner
+          Value: !Ref owner
+        - Key: ownerEmail
+          Value: !Ref ownerEmail
+        - Key: environment
+          Value: !Ref environment
+        - Key: Name
+          Value: !Join [ '-',[ !Sub '${AWS::StackName}', protected, !Select [ 0, !GetAZs "" ] ] ]
+
+  protectedSubnet1:
+    Type: AWS::EC2::Subnet
+    DependsOn:
+      - vpc
+    Properties:
+      AvailabilityZone: !Select [ 1,!GetAZs "" ]
+      CidrBlock: !Ref protectedSubnet1CIDR
+      MapPublicIpOnLaunch: false
+      VpcId: !Ref vpc
+      Tags:
+        - Key: owner
+          Value: !Ref owner
+        - Key: ownerEmail
+          Value: !Ref ownerEmail
+        - Key: environment
+          Value: !Ref environment
+        - Key: Name
+          Value: !Join [ '-',[ !Sub '${AWS::StackName}', protected, !Select [ 1, !GetAZs "" ] ] ]
+
+  # Route Tables
+  ## Public
+  routeTablePublic0:
+    Type: AWS::EC2::RouteTable
+    Condition: isPublic
+    Properties:
+      VpcId: !Ref vpc
+      Tags:
+        - Key: owner
+          Value: !Ref owner
+        - Key: ownerEmail
+          Value: !Ref ownerEmail
+        - Key: environment
+          Value: !Ref environment
+        - Key: Name
+          Value: !Join ['-',[!Sub '${AWS::StackName}', public, route-table, !Select [0, !GetAZs ""]]]
+
+  routeTablePublic1:
+    Type: AWS::EC2::RouteTable
+    Condition: isPublic
+    Properties:
+      VpcId: !Ref vpc
+      Tags:
+        - Key: owner
+          Value: !Ref owner
+        - Key: ownerEmail
+          Value: !Ref ownerEmail
+        - Key: environment
+          Value: !Ref environment
+        - Key: Name
+          Value: !Join ['-',[!Sub '${AWS::StackName}', public, route-table, !Select [1, !GetAZs ""]]]
+
+  ## Private
+  routeTablePrivate0:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref vpc
+      Tags:
+        - Key: owner
+          Value: !Ref owner
+        - Key: ownerEmail
+          Value: !Ref ownerEmail
+        - Key: environment
+          Value: !Ref environment
+        - Key: Name
+          Value: !Join ['-',[!Sub '${AWS::StackName}', private, route-table, !Select [0, !GetAZs ""]]]
+
+  routeTablePrivate1:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref vpc
+      Tags:
+        - Key: owner
+          Value: !Ref owner
+        - Key: ownerEmail
+          Value: !Ref ownerEmail
+        - Key: environment
+          Value: !Ref environment
+        - Key: Name
+          Value: !Join ['-',[!Sub '${AWS::StackName}', private, route-table, !Select [1, !GetAZs ""]]]
+
+  ## Protected
+  routeTableProtected0:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref vpc
+      Tags:
+        - Key: owner
+          Value: !Ref owner
+        - Key: ownerEmail
+          Value: !Ref ownerEmail
+        - Key: environment
+          Value: !Ref environment
+        - Key: Name
+          Value: !Join [ '-',[ !Sub '${AWS::StackName}', protected, route-table, !Select [ 0, !GetAZs "" ] ] ]
+
+  routeTableProtected1:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref vpc
+      Tags:
+        - Key: owner
+          Value: !Ref owner
+        - Key: ownerEmail
+          Value: !Ref ownerEmail
+        - Key: environment
+          Value: !Ref environment
+        - Key: Name
+          Value: !Join [ '-',[ !Sub '${AWS::StackName}', protected, route-table, !Select [ 1, !GetAZs "" ] ] ]
+
+  # Routes
+  ## Public
+  publicRoute0:
+    Type: AWS::EC2::Route
+    Condition: isPublic
+    DependsOn:
+      - publicSubnet0
+      - igwAttach
+    Properties:
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref igw
+      RouteTableId: !Ref routeTablePublic0
+
+  publicRoute1:
+    Type: AWS::EC2::Route
+    Condition: isPublic
+    DependsOn:
+      - publicSubnet1
+      - igwAttach
+    Properties:
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref igw
+      RouteTableId: !Ref routeTablePublic1
+
+  ## Private
+  privateRoute0:
+    Type: AWS::EC2::Route
+    Condition: isPublic
+    DependsOn:
+      - privateSubnet0
+      - natGateway0
+    Properties:
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref natGateway0
+      RouteTableId: !Ref routeTablePrivate0
+
+  privateRoute1:
+    Type: AWS::EC2::Route
+    Condition: isPublic
+    DependsOn:
+      - privateSubnet1
+      - natGateway1
+    Properties:
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref natGateway1
+      RouteTableId: !Ref routeTablePrivate1
+
+  # Route Table Association
+  ## Public
+  publicRoute0Association0:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Condition: isPublic
+    DependsOn:
+      - routeTablePublic0
+      - publicSubnet0
+    Properties:
+      RouteTableId: !Ref routeTablePublic0
+      SubnetId: !Ref publicSubnet0
+
+  publicRoute1Association1:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Condition: isPublic
+    DependsOn:
+      - routeTablePublic1
+      - publicSubnet1
+    Properties:
+      RouteTableId: !Ref routeTablePublic1
+      SubnetId: !Ref publicSubnet1
+
+  ## Private
+  privateRoute0Association0:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    DependsOn:
+      - routeTablePrivate0
+      - privateSubnet0
+    Properties:
+      RouteTableId: !Ref routeTablePrivate0
+      SubnetId: !Ref privateSubnet0
+
+  privateRoute1Association1:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    DependsOn:
+      - routeTablePrivate1
+      - privateSubnet1
+    Properties:
+      RouteTableId: !Ref routeTablePrivate1
+      SubnetId: !Ref privateSubnet1
+
+  ## Protected
+  protectedRoute0Association0:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    DependsOn:
+      - routeTableProtected0
+      - protectedSubnet0
+    Properties:
+      RouteTableId: !Ref routeTableProtected0
+      SubnetId: !Ref protectedSubnet0
+
+  protectedRoute1Association1:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    DependsOn:
+      - routeTableProtected1
+      - protectedSubnet1
+    Properties:
+      RouteTableId: !Ref routeTableProtected1
+      SubnetId: !Ref protectedSubnet1
+
+Outputs:
+  vpc:
+    Value: !Ref vpc
+    Export:
+      Name: !Sub '${AWS::StackName}'
+
+  vpcCIDR:
+    Value: !GetAtt vpc.CidrBlock
+    Export:
+      Name: !Sub '${AWS::StackName}-cidr'
+
+  publicSubnet0:
+    Condition: isPublic
+    Value: !Ref publicSubnet0
+    Export:
+      Name: !Sub '${AWS::StackName}-publicSubnet0'
+
+  publicSubnet1:
+    Condition: isPublic
+    Value: !Ref publicSubnet1
+    Export:
+      Name: !Sub '${AWS::StackName}-publicSubnet1'
+
+  privateSubnet0:
+    Value: !Ref privateSubnet0
+    Export:
+      Name: !Sub '${AWS::StackName}-privateSubnet0'
+
+  privateSubnet1:
+    Value: !Ref privateSubnet1
+    Export:
+      Name: !Sub '${AWS::StackName}-privateSubnet1'
+
+  protectedSubnet0:
+    Value: !Ref protectedSubnet0
+    Export:
+      Name: !Sub '${AWS::StackName}-protectedSubnet0'
+
+  protectedSubnet1:
+    Value: !Ref protectedSubnet1
+    Export:
+      Name: !Sub '${AWS::StackName}-protectedSubnet1'
+
+  publicRouteTable0:
+    Condition: isPublic
+    Value: !Ref routeTablePublic0
+    Export:
+      Name: !Sub '${AWS::StackName}-publicRouteTable0'
+
+  publicRouteTable1:
+    Condition: isPublic
+    Value: !Ref routeTablePublic1
+    Export:
+      Name: !Sub '${AWS::StackName}-publicRouteTable1'
+
+  privateRouteTable0:
+    Value: !Ref routeTablePrivate0
+    Export:
+      Name: !Sub '${AWS::StackName}-privateRouteTable0'
+
+  privateRouteTable1:
+    Value: !Ref routeTablePrivate1
+    Export:
+      Name: !Sub '${AWS::StackName}-privateRouteTable1'
