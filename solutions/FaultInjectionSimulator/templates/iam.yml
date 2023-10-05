@@ -1,0 +1,143 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Create IAM resources for Building with CloudFormation Twitch session
+
+Parameters:
+  environment:
+    Type: String
+    Default: development
+    AllowedValues:
+      - production
+      - development
+  owner:
+    Type: String
+    Default: CuriousOrbit
+  ownerEmail:
+    Type: String
+    Default: twitch@curiousorbit.com
+  project:
+    Type: String
+
+Resources:
+  # A customer managed policy that provides access to the CloudWatch Logs service. This is required
+  # by the Fault Injection Simulator (FIS) service to log actions occurring during the exection of
+  # an experiment.
+  fisManagedPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      Description: Provide FIS access to CloudWatch Logs
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Action:
+              - logs:CreateLogStream
+              - logs:PutLogEvents
+            Resource:
+              - !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:*:*'
+          - Effect: Allow
+            Action:
+              - logs:CreateLogDelivery
+              - logs:DescribeLogGroups
+              - logs:DescribeResourcePolicies
+              - logs:PutResourcePolicy
+            Resource: '*'
+
+  # This is the IAM role that is associated with the FIS experiment template.
+  fisRole:
+    Type: AWS::IAM::Role
+    DependsOn:
+      - fisManagedPolicy
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: fis.amazonaws.com
+            Action:
+              - sts:AssumeRole
+            Condition:
+              StringEquals:
+                aws:SourceAccount: !Ref 'AWS::AccountId'
+              ArnLike:
+                aws:SourceArn: !Sub 'arn:aws:fis:${AWS::Region}:${AWS::AccountId}:experiment/*'
+      Description: IAM role used by FIS in our FIS demo project
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSFaultInjectionSimulatorEC2Access
+        - !Ref fisManagedPolicy
+      Tags:
+        - Key: environment
+          Value: !Ref environment
+        - Key: owner
+          Value: !Ref owner
+        - Key: ownerEmail
+          Value: !Ref ownerEmail
+        - Key: project
+          Value: !Ref project
+
+  # While not required to deploy FIS, this is a role used during the Twitch session to provide
+  # Session Manager access to the EC2 instances used for testing/validation
+  ec2Role:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Description: IAM role used by EC2 in our FIS demo project
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+      Tags:
+        - Key: environment
+          Value: !Ref environment
+        - Key: owner
+          Value: !Ref owner
+        - Key: ownerEmail
+          Value: !Ref ownerEmail
+        - Key: project
+          Value: !Ref project
+
+  # This is the instance profile used to associate the ec2Role with the test EC2 instances used
+  # during the Twitch stream
+  profile0:
+    Type: AWS::IAM::InstanceProfile
+    DependsOn:
+      - ec2Role
+    Properties:
+      Roles:
+        - !Ref ec2Role
+
+Outputs:
+  ec2RoleId:
+    Value: !Ref ec2Role
+    Export:
+      Name: !Sub '${AWS::StackName}-ec2-role-id'
+
+  ec2RoleArn:
+    Value: !GetAtt ec2Role.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-ec2-role-arn'
+
+  fisRoleId:
+    Value: !Ref fisRole
+    Export:
+      Name: !Sub '${AWS::StackName}-fis-role-id'
+
+  fisRoleArn:
+    Value: !GetAtt fisRole.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-fis-role-arn'
+
+  profile0Id:
+    Value: !Ref profile0
+    Export:
+      Name: !Sub '${AWS::StackName}-profile-id'
+
+  profile0Arn:
+    Value: !GetAtt profile0.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-profile-arn'

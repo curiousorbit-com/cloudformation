@@ -1,0 +1,52 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Create FIS resources for Building with CloudFormation Twitch session
+
+Parameters:
+  testDuration:
+    Type: String
+    Default: 10
+  iamStack:
+    Type: String
+  owner:
+    Type: String
+    Default: CuriousOrbit
+  ownerEmail:
+    Type: String
+    Default: help@curiousorbit.com
+  environment:
+    Type: String
+    Default: development
+    AllowedValues:
+      - development
+      - production
+
+Resources:
+  fisCPUStress:
+    Type: AWS::FIS::ExperimentTemplate
+    Properties:
+      Actions:
+        cpuStressTest:
+          ActionId: aws:ssm:send-command
+          Parameters:
+            documentArn: !Sub 'arn:aws:ssm:${AWS::Region}::document/AWSFIS-Run-CPU-Stress'
+            documentParameters: '{"DurationSeconds":"600", "InstallDependencies":"True"}'
+            duration: !Sub 'PT${testDuration}M'
+          Targets:
+            Instances: webServers
+      Description: CPU stress test
+      LogConfiguration:
+        CloudWatchLogsConfiguration:
+          LogGroupArn: !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/twitch/fis-demo:*'
+        LogSchemaVersion: 2
+      Targets:
+        webServers:
+          ResourceTags:
+            stressTest: 'true'
+          ResourceType: aws:ec2:instance
+          SelectionMode: PERCENT(100)
+      StopConditions:
+        - Source: none
+      RoleArn: { 'Fn::ImportValue': !Sub '${iamStack}-fis-role-arn' }
+      Tags:
+        Name: CPUStressTest
+        environment: !Ref environment

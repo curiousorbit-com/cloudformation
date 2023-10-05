@@ -1,0 +1,46 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Create CloudWatch Logs resources for Building with CloudFormation Twitch session
+
+Parameters:
+  logGroupName:
+    Type: String
+  retentionInDays:
+    Type: Number
+    Default: 3
+  owner:
+    Type: String
+    Default: CuriousOrbit
+  ownerEmail:
+    Type: String
+    Default: help@curiousorbit.com
+  environment:
+    Type: String
+    Default: development
+    AllowedValues:
+      - development
+      - production
+
+Resources:
+  logGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/twitch/${logGroupName}'
+      RetentionInDays: !Ref retentionInDays
+      Tags:
+        - Key: owner
+          Value: !Ref owner
+        - Key: ownerEmail
+          Value: !Ref ownerEmail
+        - Key: environment
+          Value: !Ref environment
+
+Outputs:
+  logGroupName:
+    Value: !Ref logGroup
+    Export:
+      Name: !Sub '${AWS::StackName}-lg-name'
+
+  logGroupArn:
+    Value: !GetAtt logGroup.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-lg-arn'
