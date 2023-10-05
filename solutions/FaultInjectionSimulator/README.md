@@ -23,7 +23,9 @@ running any FIS test**
 new resources may affect the overall security of your account. Please carefully review the IAM CloudFormation template before
 deploying in your account.
 * Each of the templates included in this solution contains multiple parameters. While most of the parameters contain default 
-vaules you should review each parameter prior to deployment to ensure the values are approriate.
+values you should review each parameter prior to deployment to ensure the values are appropriate.
+* The FIS experiment template included in the solution runs a CPU stress test on one (or more) EC2 instances. It determines
+the targets for the test by using an instance tag stressTest:true. 
 
 ## Resources
 * [AWS Fault Injection Simulator](https://aws.amazon.com/fis/)
