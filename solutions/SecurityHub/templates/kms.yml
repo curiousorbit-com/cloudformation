@@ -1,0 +1,65 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: Create KMS resources for Building with CloudFormation Twitch session
+
+Parameters:
+  daysBeforeDeletion:
+    Type: String
+    Default: 7
+  # Tag Parameters
+  owner:
+    Type: String
+    Default: CuriousOrbit
+  ownerEmail:
+    Type: String
+    Default: help@curiousorbit.com
+  environment:
+    Type: String
+    Default: development
+    AllowedValues:
+      - development
+      - production
+
+Resources:
+  cmkAlias0:
+    Type: AWS::KMS::Alias
+    DependsOn:
+      - cmk0
+    Properties:
+      AliasName: !Sub alias/${AWS::StackName}
+      TargetKeyId: !Ref cmk0
+
+  cmk0:
+    Type: AWS::KMS::Key
+    Properties:
+      Description: A customer CMK used by other AWS services
+      Enabled: true
+      EnableKeyRotation: true
+      KeyPolicy:
+        Version: 2012-10-17
+        Statement:
+          # Allow IAM user access to key
+          - Effect: Allow
+            Principal:
+              AWS: !Sub arn:aws:iam::${AWS::AccountId}:root
+            Action: kms:*
+            Resource: '*'
+      KeyUsage: ENCRYPT_DECRYPT
+      PendingWindowInDays: !Ref daysBeforeDeletion
+      Tags:
+        - Key: owner
+          Value: !Ref owner
+        - Key: ownerEmail
+          Value: !Ref ownerEmail
+        - Key: environment
+          Value: !Ref environment
+
+Outputs:
+  cmkAlias0:
+    Value: !Ref cmkAlias0
+    Export:
+      Name: !Sub '${AWS::StackName}-alias'
+
+  cmkArn0:
+    Value: !GetAtt cmk0.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-arn'

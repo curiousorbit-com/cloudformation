@@ -1,0 +1,81 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: Create IAM resources for Building with CloudFormation Twitch session
+
+Parameters:
+  owner:
+    Type: String
+    Default: CuriousOrbit
+  ownerEmail:
+    Type: String
+    Default: help@curiousorbit.com
+  environment:
+    Type: String
+    Default: development
+    AllowedValues:
+      - development
+      - production
+  kmsStack:
+    Type: String
+  s3Stack:
+    Type: String
+
+Resources:
+  configManagedPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      Description: Customer managed policy for AWS Config IAM Role
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Sid: AllowKMSAccessForConfig
+            Effect: Allow
+            Action:
+              - kms:Decrypt
+              - kms:GenerateDataKey
+            Resource: { 'Fn::ImportValue': !Sub '${kmsStack}-arn' }
+          - Sid: AllowS3PutAccessForConfig
+            Effect: Allow
+            Action:
+              - s3:PutObject
+              - s3:PutObjectAcl
+            Resource:
+              - !Join ['/',[{ 'Fn::ImportValue': !Sub '${s3Stack}-arn' }, 'AWSLogs', !Sub '${AWS::AccountId}', '*']]
+            Condition:
+              StringLike:
+                s3:x-amz-acl: bucket-owner-full-control
+          - Sid: AllowS3GetAccessForConfig
+            Effect: Allow
+            Action:
+              - s3:GetBucketAcl
+            Resource:
+              - { 'Fn::ImportValue': !Sub '${s3Stack}-arn' }
+
+  configRole0:
+    Type: AWS::IAM::Role
+    DependsOn:
+      - configManagedPolicy
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: config.amazonaws.com
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                AWS:SourceAccount: !Sub '${AWS::AccountId}'
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWS_ConfigRole
+        - !Ref configManagedPolicy
+
+Outputs:
+  configRole0Name:
+    Value: !Ref configRole0
+    Export:
+      Name: !Sub '${AWS::StackName}-name'
+
+  configRole0Arn:
+    Value: !GetAtt configRole0.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-arn'

@@ -1,0 +1,36 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: Create AWS Config resources for Building with CloudFormation Twitch session
+
+Parameters:
+  iamStack:
+    Type: String
+  s3Stack:
+    Type: String
+  kmsStack:
+    Type: String
+  deliveryFrequency:
+    Type: String
+    Default: TwentyFour_Hours
+    AllowedValues:
+      - One_Hour
+      - Three_Hours
+      - Six_Hours
+      - Twelve_Hours
+      - TwentyFour_Hours
+
+Resources:
+  configRecorder:
+    Type: AWS::Config::ConfigurationRecorder
+    Properties:
+      RecordingGroup:
+        AllSupported: true
+        IncludeGlobalResourceTypes: true
+      RoleARN: { 'Fn::ImportValue': !Sub '${iamStack}-arn' }
+
+  configDeliveryChannel:
+    Type: AWS::Config::DeliveryChannel
+    Properties:
+      ConfigSnapshotDeliveryProperties:
+        DeliveryFrequency: !Ref deliveryFrequency
+      S3BucketName: { 'Fn::ImportValue': !Sub '${s3Stack}-name' }
+      S3KmsKeyArn: { 'Fn::ImportValue': !Sub '${kmsStack}-arn' }

@@ -1,0 +1,113 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: Create S3 resources for Building with CloudFormation Twitch session
+
+Parameters:
+  environment:
+    Type: String
+    Default: development
+    AllowedValues:
+      - development
+      - production
+  expirationInDays:
+    Type: String
+    Default: 365
+  isVersioned:
+    Type: String
+    Default: 'False'
+    AllowedValues:
+      - 'True'
+      - 'False'
+  owner:
+    Type: String
+    Default: 'Curious Orbit'
+  ownerEmail:
+    Type: String
+    Default: 'help@curiousorbit.com'
+  kmsStack:
+    Type: String
+
+Conditions:
+  isVersioned: !Equals [ !Ref isVersioned, 'True']
+
+Resources:
+  bucket0:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    Properties:
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              KMSMasterKeyID: { 'Fn::ImportValue': !Sub '${kmsStack}-arn' }
+              SSEAlgorithm: aws:kms
+      LifecycleConfiguration:
+        Rules:
+          - ExpirationInDays: !Ref expirationInDays
+            NoncurrentVersionExpirationInDays: !If [isVersioned,!Ref expirationInDays, !Ref 'AWS::NoValue']
+            Status: "Enabled"
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      VersioningConfiguration: !If [isVersioned, {Status: Enabled}, !Ref 'AWS::NoValue']
+      Tags:
+        - Key: owner
+          Value: !Ref owner
+        - Key: ownerEmail
+          Value: !Ref ownerEmail
+        - Key: environment
+          Value: !Ref environment
+
+  bucketPolicy0:
+    Type: AWS::S3::BucketPolicy
+    DependsOn:
+      - bucket0
+    Properties:
+      Bucket: !Ref bucket0
+      PolicyDocument:
+        Statement:
+          - Sid: ForceSSL
+            Effect: Deny
+            Action:
+              - s3:*
+            Principal: '*'
+            Resource:
+              - !Sub 'arn:aws:s3:::${bucket0}'
+              - !Sub 'arn:aws:s3:::${bucket0}/*'
+            Condition:
+              Bool:
+                aws:SecureTransport: 'false'
+          - Sid: AWSConfigAccessBucket
+            Effect: Allow
+            Action:
+              - s3:GetBucketAcl
+              - s3:ListBucket
+            Principal:
+              Service: config.amazonaws.com
+            Resource:
+              - !GetAtt bucket0.Arn
+            Condition:
+              StringEquals:
+                AWS::SourceAccount: !Sub '${AWS::AccountId}'
+          - Sid: AWSConfigAccessObjects
+            Effect: Allow
+            Action:
+              - s3:PutObject
+            Principal:
+              Service: config.amazonaws.com
+            Resource:
+              !Join ['/',[!GetAtt bucket0.Arn, 'AWSLogs', !Ref 'AWS::AccountId', 'Config/*']]
+            Condition:
+              StringEquals:
+                AWS::SourceAccount: !Sub '${AWS::AccountId}'
+
+Outputs:
+  bucket0:
+    Value: !Ref bucket0
+    Export:
+      Name: !Sub '${AWS::StackName}-name'
+
+  bucket0Arn:
+    Value: !GetAtt bucket0.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-arn'

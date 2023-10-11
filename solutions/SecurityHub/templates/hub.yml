@@ -1,0 +1,125 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: Create SH resources for Building with CloudFormation Twitch session
+
+Parameters:
+  autoEnableControl:
+    Type: String
+    Default: true
+    AllowedValues:
+      - true
+      - false
+  controlFindingGenerator:
+    Type: String
+    Default: SECURITY_CONTROL
+    AllowedValues:
+      - SECURITY_CONTROL
+      - STANDARD_CONTROL
+  enableDefaultStandards:
+    Type: String
+    Default: false
+    AllowedValues:
+      - true
+      - false
+  enableCISv120Standard:
+    Type: String
+    Default: false
+    AllowedValues:
+      - true
+      - false
+  enableCISv140Standard:
+    Type: String
+    Default: true
+    AllowedValues:
+      - true
+      - false
+  enableAWSFoundationsv100Standard:
+    Type: String
+    Default: true
+    AllowedValues:
+      - true
+      - false
+  enablePCIv321Standard:
+    Type: String
+    Default: false
+    AllowedValues:
+      - true
+      - false
+  enableNIST800v5Standard:
+    Type: String
+    Default: false
+    AllowedValues:
+      - true
+      - false
+  owner:
+    Type: String
+    Default: CuriousOrbit
+  ownerEmail:
+    Type: String
+    Default: help@curiousorbit.com
+  environment:
+    Type: String
+    Default: development
+    AllowedValues:
+      - development
+      - production
+
+Conditions:
+  isCISV120Enabled: !Equals [!Ref enableCISv120Standard, 'true']
+  isCISV140Enabled: !Equals [!Ref enableCISv140Standard, 'true']
+  isAWSFoundationsV100Enabled: !Equals [!Ref enableAWSFoundationsv100Standard, 'true']
+  isPCIV321Enabled: !Equals [!Ref enablePCIv321Standard, 'true']
+  isNIST800V5Enabled: !Equals [!Ref enableNIST800v5Standard, 'true']
+
+Resources:
+  hub:
+    Type: AWS::SecurityHub::Hub
+    Properties:
+      AutoEnableControls: !Ref autoEnableControl
+      ControlFindingGenerator: !Ref controlFindingGenerator
+      EnableDefaultStandards: !Ref enableDefaultStandards
+
+  cisV120Standard:
+    Type: AWS::SecurityHub::Standard
+    DependsOn:
+      - hub
+    Condition: isCISV120Enabled
+    Properties:
+      StandardsArn: arn:aws:securityhub:::ruleset/cis-aws-foundations-benchmark/v/1.2.0
+
+  cisV140Standard:
+    Type: AWS::SecurityHub::Standard
+    DependsOn:
+      - hub
+    Condition: isCISV140Enabled
+    Properties:
+      StandardsArn: !Sub 'arn:aws:securityhub:${AWS::Region}::standards/cis-aws-foundations-benchmark/v/1.4.0'
+
+  awsFoundationsV100Standard:
+    Type: AWS::SecurityHub::Standard
+    DependsOn:
+      - hub
+    Condition: isAWSFoundationsV100Enabled
+    Properties:
+      StandardsArn: !Sub 'arn:aws:securityhub:${AWS::Region}::standards/aws-foundational-security-best-practices/v/1.0.0'
+
+  pciV321Standard:
+    Type: AWS::SecurityHub::Standard
+    DependsOn:
+      - hub
+    Condition: isPCIV321Enabled
+    Properties:
+      StandardsArn: !Sub 'arn:aws:securityhub:${AWS::Region}::standards/pci-dss/v/3.2.1'
+
+  NIST800V5Standard:
+    Type: AWS::SecurityHub::Standard
+    DependsOn:
+      - hub
+    Condition: isNIST800V5Enabled
+    Properties:
+      StandardsArn: !Sub 'arn:aws:securityhub:${AWS::Region}::standards/nist-800-53/v/5.0.0'
+
+Outputs:
+  hubArn:
+    Value: !Ref hub
+    Export:
+      Name: !Sub '${AWS::StackName}-arn'
